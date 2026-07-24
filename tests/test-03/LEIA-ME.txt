@@ -1,0 +1,12 @@
+Como ativar a Prova 03:
+
+1. Coloque a prova em PDF aqui nesta pasta com o nome: exam.pdf
+2. Coloque a imagem de capa aqui com o nome: cover.png
+3. Coloque os áudios na pasta audio/ com os nomes: 00.mp3, 01.mp3, 02.mp3 ... até o último áudio da prova
+4. (Opcional) Coloque até 3 imagens extras de Picture Description na pasta picture-description/
+   com os nomes 1.jpg, 2.jpg, 3.jpg (ou .png) — isso é detectado sozinho, não precisa editar nada.
+5. Abra o arquivo index.html (na raiz do site) em um editor de texto (ex: Bloco de Notas),
+   procure pelo bloco "test-03" e troque "available: false" para "available: true".
+   Confira/edite os nomes das faixas em "tracks" se precisar.
+
+Pronto, a Prova 03 vai aparecer liberada no menu inicial.

@@ -1,0 +1,14 @@
+Descrição de Imagem — detecção automática
+
+Coloque aqui até 3 arquivos chamados:
+  1.jpg
+  2.jpg
+  3.jpg
+(pode ser .png também, ex: 1.png)
+
+Não precisa editar nenhum código. O painel detecta sozinho quais desses
+arquivos existem e cria os botões de seleção (Imagem 1 / Imagem 2 / Imagem 3)
+automaticamente na aba "Descrição de Imagem".
+
+Se quiser só 1 imagem, coloque apenas o 1.jpg — o seletor nem aparece,
+mostra direto a imagem única.
