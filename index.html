@@ -1420,10 +1420,20 @@ function fileToBase64(file){
 // Acha o bloco "{ id:"test-XX" ... }" dentro do texto do index.html,
 // contando chaves para respeitar aninhamento (funciona com 1 ou várias linhas).
 function findTestBlock(sourceText, testId){
-  const marker = '{ id:"' + testId + '"';
-  const idx = sourceText.indexOf(marker);
-  if(idx === -1) return null;
-  let depth = 0, i = idx;
+  // Procura "id" seguido de "test-XX" com aspas simples ou duplas,
+  // com qualquer espaçamento (cobre tanto o formato numa linha só
+  // quanto o formato espalhado em várias linhas com indentação).
+  const re = new RegExp('id\\s*:\\s*["\']' + testId + '["\']');
+  const m = re.exec(sourceText);
+  if(!m) return null;
+
+  // A partir do ponto encontrado, volta até achar a chave "{" que abre
+  // esse objeto (a mais próxima antes do "id").
+  let start = m.index;
+  while(start > 0 && sourceText[start] !== '{') start--;
+  if(sourceText[start] !== '{') return null;
+
+  let depth = 0, i = start;
   for(; i < sourceText.length; i++){
     if(sourceText[i] === '{') depth++;
     else if(sourceText[i] === '}'){
@@ -1433,7 +1443,7 @@ function findTestBlock(sourceText, testId){
   }
   let end = i;
   if(sourceText[end] === ',') end++;
-  return { start: idx, end, text: sourceText.slice(idx, end) };
+  return { start, end, text: sourceText.slice(start, end) };
 }
 
 function extractTracksText(blockText){
