@@ -387,42 +387,55 @@
     gap:10px;
     flex-shrink:0;
   }
-  .lesson-switch{
-    display:flex;
-    align-items:center;
-    gap:6px;
+  .student-view-label{
     font-size:11px;
     color: var(--text-dim);
-    cursor:pointer;
-    user-select:none;
+    text-transform:uppercase;
+    letter-spacing:0.05em;
+    white-space:nowrap;
   }
-  .lesson-switch input{
-    accent-color: var(--amber);
-    width:16px; height:16px;
-    cursor:pointer;
+  .student-view-buttons{
+    display:flex;
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
   }
-  .reveal-btn{
+  .student-view-btn{
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-dim);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 10px;
+    cursor: pointer;
+    white-space:nowrap;
+  }
+  .student-view-btn.active{
     background: var(--green);
-    color:#08210f;
-    border:none;
+    color: #08210f;
+  }
+  .open-student-btn{
+    background: var(--panel-raised);
+    border: 1px solid var(--hairline);
+    color: var(--text);
     border-radius:8px;
-    padding:8px 14px;
-    font-weight:700;
-    font-size:12px;
+    padding:8px 12px;
+    font-weight:600;
+    font-size:11.5px;
     cursor:pointer;
     white-space:nowrap;
-    animation: pulseGlow 1.8s infinite;
   }
-  .reveal-btn.locked{
-    background: var(--panel-raised);
-    color: var(--text-dim);
-    border: 1px solid var(--hairline);
-    animation:none;
-  }
-  @keyframes pulseGlow{
-    0%,100%{ box-shadow: 0 0 0 0 rgba(70,209,137,0.5); }
-    50%{ box-shadow: 0 0 0 6px rgba(70,209,137,0); }
-  }
+  .open-student-btn:hover{ border-color: var(--amber); }
+
+  /* ============ STUDENT (ALUNO) TAB MODE ============ */
+  .student-mode .topbar{ display:none !important; }
+  .student-mode .panel{ display:none !important; }
+  .student-mode .body{ height:100vh; }
+  .student-mode .stage{ border-right:none; }
 
   .panel{
     flex: 0 0 300px;
@@ -744,12 +757,12 @@
     <div class="login-actions" id="loginActions">
       <button class="login-btn student" id="btnStudent">
         <span class="icon">🎓</span>
-        <span class="title">Sou Aluno</span>
+        <span class="title">Dar Aula</span>
         <span class="desc">Acessar as provas de simulado</span>
       </button>
       <button class="login-btn teacher" id="btnTeacher">
         <span class="icon">🛠️</span>
-        <span class="title">Sou Professor</span>
+        <span class="title">Configurações</span>
         <span class="desc">Adicionar provas e áudios</span>
       </button>
     </div>
@@ -792,11 +805,13 @@
       </div>
 
       <div class="lesson-toggle" id="lessonToggle">
-        <button class="reveal-btn" id="revealBtn" style="display:none">🔓 Liberar PDF da Prova</button>
-        <label class="lesson-switch">
-          <input type="checkbox" id="lessonModeCheck">
-          <span>Modo Aula</span>
-        </label>
+        <span class="student-view-label">Aluno vê:</span>
+        <div class="student-view-buttons" id="studentViewButtons">
+          <button class="student-view-btn active" data-sview="image">Capa</button>
+          <button class="student-view-btn" data-sview="pdf">Prova (PDF)</button>
+          <button class="student-view-btn" data-sview="picture">Descrição</button>
+        </div>
+        <button class="open-student-btn" id="openStudentBtn">🖥️ Abrir Tela do Aluno</button>
       </div>
 
       <div class="status" id="statusText">CANAL EM ESPERA</div>
@@ -1102,13 +1117,18 @@ function openTest(id){
   audio.pause();
   audio.src = "";
 
-  // volta sempre para a aba do PDF ao abrir uma prova (ou pra Capa, se o Modo Aula estiver ativo)
-  pdfRevealed = false;
-  if(lessonMode){
-    setView('image');
-    updateRevealBtn();
-  } else {
-    setView('pdf');
+  // a navegação do professor sempre abre no PDF (é só a visão dele, privada);
+  // a Tela do Aluno abre sempre na Capa por padrão
+  setView(isStudentTab ? studentView : 'pdf');
+
+  // a Tela do Aluno sempre volta pra Capa quando uma prova nova é aberta,
+  // e é avisada imediatamente da troca (mesmo que já estivesse aberta)
+  if(!isStudentTab){
+    studentView = 'image';
+    document.querySelectorAll('.student-view-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.sview === 'image');
+    });
+    lessonChannel.postMessage({ type: 'sync', testId: t.id, view: 'image', trackIndex: null, playing: false });
   }
 
   renderChannels();
@@ -1177,6 +1197,7 @@ function selectTrack(i){
   statusText.textContent = "CANAL " + t.num + " ATIVO";
   playBtn.disabled = false;
   renderChannels();
+  broadcastFullState();
 }
 
 function togglePlay(){
@@ -1191,15 +1212,18 @@ audio.addEventListener('play', () => {
   pauseIcon.style.display = 'block';
   if(currentIndex !== null) playedIndices.add(currentIndex);
   renderChannels();
+  broadcastFullState();
 });
 audio.addEventListener('pause', () => {
   playIcon.style.display = 'block';
   pauseIcon.style.display = 'none';
   renderChannels();
+  broadcastFullState();
 });
 audio.addEventListener('ended', () => {
   statusText.textContent = "FAIXA CONCLUÍDA";
   renderChannels();
+  broadcastFullState();
 });
 audio.addEventListener('timeupdate', () => {
   if(!seeking){
@@ -1214,8 +1238,25 @@ seek.addEventListener('change', () => {
 });
 
 /* ======================================================================
-   TOGGLE: PDF / CAPA / DESCRIÇÃO DE IMAGEM
+   TELA DO ALUNO (segunda aba, sincronizada em tempo real)
+
+   A ideia: o professor nunca compartilha a própria tela. Ele abre uma
+   segunda aba ("Tela do Aluno") e é ESSA que fica compartilhada no
+   Meet/projetor. O professor continua livre pra navegar entre PDF/Capa/
+   Descrição na SUA tela, tocar os áudios etc — nada disso afeta o que o
+   aluno vê. O que o aluno vê é controlado à parte, pelos botões
+   "Aluno vê: Capa / Prova / Descrição". O áudio, esse sim, é sempre
+   espelhado automaticamente (o aluno precisa ouvir o que o professor
+   toca, não importa qual tela estiver mostrando).
+
+   A comunicação entre as duas abas é feita via BroadcastChannel, que só
+   funciona entre abas abertas no MESMO navegador — por isso a Tela do
+   Aluno deve ser aberta a partir do botão aqui (mesma origem/mesmo
+   navegador do professor), não enviada por link para o aluno acessar
+   em outro dispositivo.
    ====================================================================== */
+
+/* ---------- (declarado primeiro pois o bloco de sincronização usa) ---------- */
 const toggleBtns = document.querySelectorAll('.toggle-btn');
 const viewPdf = document.getElementById('view-pdf');
 const viewImage = document.getElementById('view-image');
@@ -1232,49 +1273,81 @@ toggleBtns.forEach(btn => {
   btn.addEventListener('click', () => setView(btn.dataset.view));
 });
 
-/* ======================================================================
-   MODO AULA
-   Ao ativar, a tela (que normalmente fica espelhada no Meet/projetor)
-   trava na Capa. O professor só mostra o PDF da prova pro aluno quando
-   clicar em "Liberar PDF" — assim dá pra ler o enunciado antes sem que
-   o aluno veja as questões.
-   ====================================================================== */
-let lessonMode = false;
-let pdfRevealed = false;
-const lessonModeCheck = document.getElementById('lessonModeCheck');
-const revealBtn = document.getElementById('revealBtn');
-const viewToggleEl = document.getElementById('viewToggle');
+const urlParams = new URLSearchParams(location.search);
+const isStudentTab = urlParams.get('aluno') === '1';
+const lessonChannel = new BroadcastChannel('cavok_lesson_sync');
 
-function updateRevealBtn(){
-  if(pdfRevealed){
-    revealBtn.textContent = '🔒 Ocultar PDF (voltar pra Capa)';
-    revealBtn.classList.remove('locked');
-  } else {
-    revealBtn.textContent = '🔓 Liberar PDF da Prova';
-    revealBtn.classList.remove('locked');
-  }
+let studentView = 'image'; // o que o aluno está vendo agora (controlado pelo professor)
+
+function broadcastFullState(){
+  if(isStudentTab || !activeTest) return;
+  lessonChannel.postMessage({
+    type: 'state',
+    testId: activeTest.id,
+    view: studentView,
+    trackIndex: currentIndex,
+    playing: currentIndex !== null ? !audio.paused : false,
+    time: audio.currentTime
+  });
 }
 
-lessonModeCheck.addEventListener('change', () => {
-  lessonMode = lessonModeCheck.checked;
-  if(lessonMode){
-    pdfRevealed = false;
-    viewToggleEl.style.display = 'none';
-    revealBtn.style.display = 'inline-block';
-    setView('image');
-    updateRevealBtn();
-  } else {
-    viewToggleEl.style.display = 'flex';
-    revealBtn.style.display = 'none';
-    setView('pdf');
-  }
-});
+if(isStudentTab){
+  /* ---------- Esta aba É a Tela do Aluno ---------- */
+  document.body.classList.add('student-mode');
+  const initialTestId = urlParams.get('test');
+  if(initialTestId) openTest(initialTestId);
+  screenLogin.style.display = 'none';
+  screenMenu.style.display = 'none';
+  screenTeacher.style.display = 'none';
+  screenTest.style.display = 'flex';
 
-revealBtn.addEventListener('click', () => {
-  pdfRevealed = !pdfRevealed;
-  setView(pdfRevealed ? 'pdf' : 'image');
-  updateRevealBtn();
-});
+  lessonChannel.postMessage({ type: 'hello' });
+
+  lessonChannel.onmessage = (e) => {
+    const msg = e.data;
+    if(msg.type === 'state' || msg.type === 'sync'){
+      if(msg.testId && (!activeTest || activeTest.id !== msg.testId)){
+        openTest(msg.testId);
+      }
+      if(msg.view){ setView(msg.view); }
+      if(typeof msg.trackIndex === 'number' && activeTest && activeTest.tracks[msg.trackIndex]){
+        if(currentIndex !== msg.trackIndex){
+          selectTrack(msg.trackIndex);
+        }
+        if(msg.playing === false){ audio.pause(); }
+        else if(msg.playing === true && audio.paused){ audio.play().catch(()=>{}); }
+        if(typeof msg.time === 'number' && Math.abs(audio.currentTime - msg.time) > 1.5){
+          audio.currentTime = msg.time;
+        }
+      }
+    }
+  };
+} else {
+  /* ---------- Esta aba é a do PROFESSOR ---------- */
+  lessonChannel.onmessage = (e) => {
+    if(e.data && e.data.type === 'hello'){
+      broadcastFullState();
+    }
+  };
+
+  const studentViewBtns = document.querySelectorAll('.student-view-btn');
+  studentViewBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      studentView = btn.dataset.sview;
+      studentViewBtns.forEach(b => b.classList.toggle('active', b === btn));
+      lessonChannel.postMessage({ type: 'sync', view: studentView });
+    });
+  });
+
+  document.getElementById('openStudentBtn').addEventListener('click', () => {
+    if(!activeTest){
+      alert('Abra uma prova primeiro.');
+      return;
+    }
+    const url = location.pathname + '?aluno=1&test=' + encodeURIComponent(activeTest.id);
+    window.open(url, 'cavok_aluno_' + activeTest.id);
+  });
+}
 
 
 /* ======================================================================
