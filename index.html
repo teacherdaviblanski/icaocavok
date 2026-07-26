@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CAVOK Idiomas | Painel de Simulados</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="CAVOK">
+<meta name="theme-color" content="#0b1530">
 <style>
   :root{
     --bg: #0f1417;
@@ -1434,9 +1439,24 @@ function ghHeaders(cfg){
   };
 }
 
+// Tenta de novo automaticamente quando a falha é de rede (ex: "Failed to
+// fetch", conexão caiu no meio do envio de um arquivo grande) — bem comum
+// quando se sobe muitos arquivos seguidos numa conexão instável.
+async function fetchWithRetry(url, options, retries){
+  retries = (retries === undefined) ? 2 : retries;
+  for(let attempt = 0; attempt <= retries; attempt++){
+    try{
+      return await fetch(url, options);
+    }catch(networkErr){
+      if(attempt === retries) throw new Error('Falha de conexão (tente novamente — verifique sua internet): ' + networkErr.message);
+      await new Promise(r => setTimeout(r, 1200 * (attempt + 1)));
+    }
+  }
+}
+
 async function ghGetSha(cfg, path){
   const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`;
-  const res = await fetch(url, { headers: ghHeaders(cfg) });
+  const res = await fetchWithRetry(url, { headers: ghHeaders(cfg) });
   if(res.status === 200){
     const data = await res.json();
     return data.sha;
@@ -1448,21 +1468,21 @@ async function ghPutFile(cfg, path, base64Content, message){
   const sha = await ghGetSha(cfg, path);
   const body = { message, content: base64Content, branch: cfg.branch };
   if(sha) body.sha = sha;
-  const res = await fetch(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
+  const res = await fetchWithRetry(`https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}`, {
     method: 'PUT',
     headers: { ...ghHeaders(cfg), 'Content-Type': 'application/json' },
     body: JSON.stringify(body)
   });
   if(!res.ok){
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.message || ('Erro ao enviar ' + path));
+    throw new Error((err.message || ('Erro ao enviar ' + path)) + ' [' + path + ']');
   }
   return res.json();
 }
 
 async function ghGetTextFile(cfg, path){
   const url = `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${path}?ref=${encodeURIComponent(cfg.branch)}`;
-  const res = await fetch(url, { headers: ghHeaders(cfg) });
+  const res = await fetchWithRetry(url, { headers: ghHeaders(cfg) });
   if(!res.ok) throw new Error('Não consegui ler ' + path + ' no repositório.');
   const data = await res.json();
   const text = b64DecodeUnicode(data.content.replace(/\n/g, ''));
@@ -1579,7 +1599,7 @@ document.getElementById('ghConnect').addEventListener('click', async () => {
   btn.disabled = true;
   btn.textContent = 'Testando conexão...';
   try{
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: ghHeaders(cfg) });
+    const res = await fetchWithRetry(`https://api.github.com/repos/${owner}/${repo}`, { headers: ghHeaders(cfg) });
     if(!res.ok) throw new Error('Não consegui acessar esse repositório. Confira usuário, nome do repositório e token.');
     saveGhConfig(cfg);
     showTeacherAdmin(cfg);
